@@ -240,6 +240,11 @@ namespace VMTLauncher
 
             try
             {
+                // Backup preserved user-data folders (e.g. DataSave)
+                SetStatus("Preserving user data...");
+                var preservedBackups = await Task.Run(
+                    () => UpdateService.BackupPreservedFolders(_settings.AppPath));
+
                 // Optional: Backup Managed folder
                 SetStatus("Creating backup...");
                 await Task.Run(() => UpdateService.BackupManagedFolder(_settings.AppPath));
@@ -258,6 +263,10 @@ namespace VMTLauncher
                     _settings.AppPath,
                     progressReporter,
                     _extractCts.Token);
+
+                // Restore preserved user-data folders
+                SetStatus("Restoring user data...");
+                await Task.Run(() => UpdateService.RestorePreservedFolders(preservedBackups));
 
                 // Write version file
                 UpdateService.WriteVersionFile(_settings.AppPath, selected.FileName);

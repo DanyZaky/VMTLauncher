@@ -308,6 +308,95 @@ namespace VMTLauncher
                 Directory.Move(managedPath, backupPath);
             }
         }
+
+        // ─── Preserved Folders ───────────────────────────────────────
+
+        /// <summary>
+        /// Relative paths (from appPath) of folders whose contents should be
+        /// preserved across updates.  Add more entries here if needed.
+        /// </summary>
+        private static readonly string[] PreservedFolders = new[]
+        {
+            Path.Combine("VMT Editor_Data", "StreamingAssets", "DataSave")
+        };
+
+        /// <summary>
+        /// Backs up every folder listed in <see cref="PreservedFolders"/>
+        /// to a temporary sibling directory so their contents survive
+        /// a full zip extraction that overwrites the destination.
+        /// Returns a list of (backupPath, originalPath) pairs for later restore.
+        /// </summary>
+        public static List<(string BackupPath, string OriginalPath)> BackupPreservedFolders(string appPath)
+        {
+            var backups = new List<(string, string)>();
+
+            foreach (var relPath in PreservedFolders)
+            {
+                string originalPath = Path.Combine(appPath, relPath);
+                if (!Directory.Exists(originalPath))
+                    continue;
+
+                // Create a unique backup next to the original
+                string backupPath = originalPath + "_PreUpdateBackup";
+
+                // Remove stale backup if present
+                if (Directory.Exists(backupPath))
+                    Directory.Delete(backupPath, recursive: true);
+
+                CopyDirectory(originalPath, backupPath);
+                backups.Add((backupPath, originalPath));
+
+                Debug.WriteLine($"[UpdateService] Backed up preserved folder: {relPath}");
+            }
+
+            return backups;
+        }
+
+        /// <summary>
+        /// Restores previously backed-up preserved folders.
+        /// Files from the backup are copied back, overwriting any files the
+        /// zip may have placed there, while keeping new files from the zip intact.
+        /// </summary>
+        public static void RestorePreservedFolders(List<(string BackupPath, string OriginalPath)> backups)
+        {
+            foreach (var (backupPath, originalPath) in backups)
+            {
+                if (!Directory.Exists(backupPath))
+                    continue;
+
+                // Ensure the target dir exists (zip may have removed it)
+                Directory.CreateDirectory(originalPath);
+
+                // Copy every file from backup back into the original location
+                CopyDirectory(backupPath, originalPath);
+
+                // Clean up backup
+                Directory.Delete(backupPath, recursive: true);
+
+                Debug.WriteLine($"[UpdateService] Restored preserved folder: {originalPath}");
+            }
+        }
+
+        /// <summary>
+        /// Recursively copies all files and subdirectories from source to destination.
+        /// Overwrites existing files.
+        /// </summary>
+        private static void CopyDirectory(string sourceDir, string destDir)
+        {
+            Directory.CreateDirectory(destDir);
+
+            foreach (var file in Directory.GetFiles(sourceDir))
+            {
+                string destFile = Path.Combine(destDir, Path.GetFileName(file));
+                File.Copy(file, destFile, overwrite: true);
+            }
+
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+            {
+                string destSubDir = Path.Combine(destDir, Path.GetFileName(dir));
+                CopyDirectory(dir, destSubDir);
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
